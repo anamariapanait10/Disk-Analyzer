@@ -11,8 +11,4 @@
 #define LIST "7"
 #define PRINT "8"
 
-int* ids = (int *) malloc(100 * sizeof(int));
-for (int i = 0; i < 100; i++)
-    ids[i] = i;
-
 #endif
