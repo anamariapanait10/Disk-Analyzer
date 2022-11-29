@@ -18,11 +18,11 @@ int main()
         return errno;
    }
 
-   fptr = fopen("~/.bashcr","a"); // open bashcr in append mode
+   fptr = fopen("~/.bashrc","a"); // open bashrc in append mode
 
    if(fptr == NULL) 
    {
-      perror("Error opening bashcr!");   
+      perror("Error opening bashrc!");   
       return errno;             
    }
 
