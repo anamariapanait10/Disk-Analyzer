@@ -3,12 +3,16 @@
 
 #define HELP "0"
 #define ADD "1"
-#define PRIORITY "2"
-#define SUSPEND "3"
-#define RESUME "4"
-#define REMOVE "5"
-#define INFO "6"
-#define LIST "7"
-#define PRINT "8"
+#define SUSPEND "2"
+#define RESUME "3"
+#define REMOVE "4"
+#define INFO "5"
+#define LIST "6"
+#define PRINT "7"
+
+const char *daemon_pid_file_path = "/tmp/disk-analyzer/daemon.pid";
+const char *da_pid_file_path = "/tmp/disk-analyzer/da.pid";
+const char *instruction_file_path = "/tmp/disk-analyzer/instruction.txt";
+const char *output_file_path = "/tmp/disk-analyzer/output.txt";
 
 #endif
