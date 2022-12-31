@@ -5,19 +5,87 @@
 #include <stdbool.h>
 #include <signal.h>
 #include <unistd.h> // for write/close/sleep functions
+#include <sys/types.h> //pid_t type
+#include <inttypes.h>
+#include <iso646.h>
+#include <errno.h> 
 #include "constants.h" // header for command-constants and paths
 #include "utils.h" // header for map related functions and itoa
 #include "process_instructions.h"
 
 int daemon_pid; // daemon_pid is the pid read from the corresponding file
 
+char* read_from_file(char* file){ 
+	FILE* fptr;
+	char buffer;
+	char* result = "";
+	fptr = fopen(file, "r"); //open file in read mode
+
+	if(fptr == NULL){
+		perror("Error opening file!\n");
+		return NULL;	
+	}
+
+	int r;
+	while((r = fread(fptr, &buffer, 1) > 0) //read content of file
+		strcat(result, buffer);
+
+	if(ferror(fptr)) { //check if error
+		perror("Error reading from file!\n");
+		return NULL;
+    }
+	fclose(fptr);
+	return result;
+}
+
+int write_to_file(char* file, char* text){
+	char* fptr;
+	fptr = fopen(file, "w"); //open file in write mode; if it does not exist, it will be created
+    
+	if(fptr == NULL){ 
+		perror("Error opening file!\n");
+		return errno;	
+	}
+
+	int w = fwrite(text, 1, sizeof(text), fptr); //write text to file
+	if(w < 0){
+		perror("Error writing to file!\n");
+		return errno;
+	}
+	fclose(fptr);
+	return 0;
+}
+
+pid_t read_pid(){
+	pid_t result;
+	char* r = read_from_file(daemon_pid_path);
+
+	if(r == NULL)
+		return (pid_t)0;
+
+	intmax_t xmax;
+	char* tmp;
+
+	//convert string to pid_t;
+	errno = 0;
+	xmax = strtoimax(r, &tmp, 10);
+	if(errno != 0 || tmp == r || *tmp != '\0' || xmax != (pid_t)xmax){
+		perror("Bad PID!\n");
+		return (pid_t)0;
+	}
+	result = (pid_t)xmax;
+    
+	return result;
+}
+
 void write_instruction_to_daemon(char* instruction){   
     create_dir_if_not_exists(instruction_file_path);
     // TODO: use write_to_file function instead when implemented
-    int fd = open(instruction_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);    
+    /*int fd = open(instruction_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);    
     int len = strlen(instruction);
     write(fd, instruction, len);
-    close(fd);
+    close(fd);*/
+    write_to_file("instruction_file_path", instruction);
 
     if (daemon_pid > 0){ // if the daemon_pid was read correctly from file
         // we send a signal to the daemon to inform it that a command has been written to file 
@@ -62,7 +130,7 @@ void start_daemon_if_not_running() {
 
 void process_output_from_daemon(int signo) {
     // TODO: use read_from_file function instead when implemented
-    int fd = open(daemon_pid_file_path, O_RDONLY);
+    /*int fd = open(daemon_pid_file_path, O_RDONLY);
      if(fd < 0){
         perror("Couldn't open daemon output file\n");
         return;
@@ -70,7 +138,8 @@ void process_output_from_daemon(int signo) {
     // TODO: change 4000 to the exact number of bytes of the file
     char *buf = (char*) malloc(4000);
     read(fd, buf, 4000);
-    close(fd);
+    close(fd); */
+    char* buf = read_from_file("daemon_pid_file_path");
 
     // print output to console
     printf("%s\n", buf);
