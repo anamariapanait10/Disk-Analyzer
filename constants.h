@@ -10,6 +10,8 @@
 #define LIST "6"
 #define PRINT "7"
 
+#define INSTR_LENGTH 100
+
 const char *daemon_pid_file_path = "/tmp/disk-analyzer/daemon.pid";
 const char *da_pid_file_path = "/tmp/disk-analyzer/da.pid";
 const char *instruction_file_path = "/tmp/disk-analyzer/instruction.txt";

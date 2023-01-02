@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <signal.h>
 #include <unistd.h> // for write/close/sleep functions
+#include <sys/stat.h> // for stat structure (we use it to find out the number of bytes in a file)
 #include "constants.h" // header for command-constants and paths
 #include "utils.h" // header for map related functions and itoa
 #include "process_instructions.h"
@@ -67,9 +68,14 @@ void process_output_from_daemon(int signo) {
         perror("Couldn't open daemon output file\n");
         return;
     }
-    // TODO: change 4000 to the exact number of bytes of the file
-    char *buf = (char*) malloc(4000);
-    read(fd, buf, 4000);
+
+    struct stat sb;
+    if(stat(daemon_pid_file_path, &sb)) {
+        perror(daemon_pid_file_path);
+        exit(0);
+    }
+    char *buf = (char*) malloc(sb.st_size);
+    read(fd, buf, sb.st_size);
     close(fd);
 
     // print output to console
@@ -83,7 +89,7 @@ void write_pid_to_file(){
     int pid = getpid();
     itoa(pid, pidstring);
     // TODO: use write_to_file function instead when implemented
-    int fd = open(da_pid_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);    
+    int fd = open(da_pid_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);
     write(fd, pidstring, 10); // write pid to file
     close(fd);
 }
@@ -99,8 +105,7 @@ int main(int argc, char** argv)
 
     start_daemon_if_not_running();
 
-    // TODO: maybe change 500 to a constant and put it in constants.h
-    char* instruction = malloc(500);
+    char* instruction = malloc(INSTR_LENGTH);
     if (argc == 1) {
         printf("No arguments found. Please introduce an analyze-option and a desired path.\n");
         printf("Use --help command for more information.\n");
@@ -126,15 +131,16 @@ int main(int argc, char** argv)
                 return 0;
             } else { // ADD command
                 char* priority = malloc(7);
-                
-                // TODO: add validation for priority and path
+                int fd = open(argv[2], O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);
+                if (fd < 0)
+                    printf("Invalid path!\n");
                 if (!strcmp(argv[4], "1"))
                     strcpy(priority, "low");
                 else if (!strcmp(argv[4], "2"))
                     strcpy(priority, "medium");
                 else if (!strcmp(argv[4], "3"))
                     strcpy(priority, "high");
-
+                else printf("Invalid arguments for --add command.\nUse --help command for more information.\n");
                 sprintf(instruction, "%s\n%s\n%s\n", ADD, argv[2], priority);
             }
         } else if (!strcmp(argv[1], "-l") || !strcmp(argv[1], "--list")){ 
@@ -155,23 +161,28 @@ int main(int argc, char** argv)
             printf("Invalid number of arguments.\nUse --help command for more information.\n");
             return 0;
         } else if (!strcmp(argv[1], "-S") || !strcmp(argv[1], "--suspend")){
-            // TODO: add validation for id
+            if(!atoi(argv[2]))
+                printf ("Invalid task ID.");
             // SUSPEND command
             sprintf(instruction, "%s\n%s\n", SUSPEND, argv[2]);
         } else if (!strcmp(argv[1], "-R") || !strcmp(argv[1], "--resume")){
-            // TODO: add validation for id
+            if(!atoi(argv[2]))
+                printf ("Invalid task ID.");
             // RESUME command
             sprintf(instruction, "%s\n%s\n", RESUME, argv[2]);
         } else if (!strcmp(argv[1], "-r") || !strcmp(argv[1], "--remove")){
-            // TODO: add validation for id
+            if(!atoi(argv[2]))
+                printf ("Invalid task ID.");
             // REMOVE command
             sprintf(instruction, "%s\n%s\n", REMOVE, argv[2]);
         } else if (!strcmp(argv[1], "-i") || !strcmp(argv[1], "--info")){
-            // TODO: add validation for id
+            if(!atoi(argv[2]))
+                printf ("Invalid task ID.");
             // INFO command
             sprintf(instruction, "%s\n%s\n", INFO, argv[2]);
-        } else if (!strcmp(argv[1], "-p") || !strcmp(argv[1], "--print")){   
-            // TODO: add validation for id
+        } else if (!strcmp(argv[1], "-p") || !strcmp(argv[1], "--print")){
+            if(!atoi(argv[2]))
+                printf ("Invalid task ID.");
             // PRINT command
             sprintf(instruction, "%s\n%s\n", PRINT, argv[2]);
         }

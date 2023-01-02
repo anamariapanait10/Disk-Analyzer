@@ -95,91 +95,85 @@ void map_clear(struct my_map *m){
     free(m->lista);
 }
 
-// priority queue
-typedef struct node {
-    int data;
- 
-    // Lower values indicate higher priority
+typedef struct thr_node {
+    int id;
+    
     int priority;
+
+    pthread_t thr;
  
-    struct node* next;
+    struct thr_node* next;
  
-} Node;
+} thr_Node;
  
-// Function to Create A New Node
-Node* newNode(int d, int p)
+Node* newNode(int id, int p, pthread_t thr)
 {
-    Node* temp = (Node*)malloc(sizeof(Node));
-    temp->data = d;
-    temp->priority = p;
-    temp->next = NULL;
+    thr_Node* aux = (thr_Node*)malloc(sizeof(thr_Node));
+    aux->id = id;
+    aux->priority = p;
+    aux->thr = thr;
+    aux->next = NULL;
  
-    return temp;
-}
- 
-// Return the value at head
-int peek(Node** head)
-{
-    return (*head)->data;
+    return aux;
 }
  
 // Removes the element with the
 // highest priority from the list
-void pop(Node** head)
+void pop(thr_Node** head)
 {
-    Node* temp = *head;
+    thr_Node* aux = *head;
     (*head) = (*head)->next;
-    free(temp);
+    free(aux);
 }
- 
-// Function to push according to priority
-void push(Node** head, int d, int p)
+
+void push(thr_Node** head, int d, int p, pthread_t thr)
 {
-    Node* start = (*head);
+    thr_Node* start = (*head);
  
-    // Create new Node
-    Node* temp = newNode(d, p);
+    thr_Node* aux = newNode(d, p, thr);
  
-    // Special Case: The head of list has lesser
-    // priority than new node. So insert new
+    // If the head of list has lesser
+    // priority than new node, insert new
     // node before head node and change head node.
     if ((*head)->priority > p) {
- 
-        // Insert New Node before head
-        temp->next = *head;
-        (*head) = temp;
+        aux->next = *head;
+        (*head) = aux;
     }
     else {
  
-        // Traverse the list and find a
-        // position to insert new node
+        // Traverse the list and find the
+        // position to insert the new node
         while (start->next != NULL &&
             start->next->priority < p) {
             start = start->next;
         }
  
-        // Either at the ends of the list
+        // Either at the end of the list
         // or at required position
-        temp->next = start->next;
-        start->next = temp;
+        aux->next = start->next;
+        start->next = aux;
     }
 }
  
-// Function to check is list is empty
-int isEmpty(Node** head)
+// Function to check if list is empty
+int isEmpty(thr_Node** head)
 {
     return (*head) == NULL;
 }
 
-void reverse(char *s){
-    int i, j;
-    char aux;
-    for (i = 0, j = strlen(s)-1; i < j; i++, j--) {
-        aux = s[i];
-        s[i] = s[j];
-        s[j] = aux;
-    }
-} 
+void* reverse (char *v)
+{
+      char *str = (char *) v, *s = str, *f = str + strlen(str) - 1;
+      while (s < f)
+      {
+            *s ^= *f;
+            *f ^= *s;
+            *s ^= *f;
+            s++;
+            f--;
+      }
+      return str;
+}
 
 void itoa(int n, char *s){
     int i = 0;
