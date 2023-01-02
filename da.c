@@ -85,7 +85,7 @@ void write_instruction_to_daemon(char* instruction){
     int len = strlen(instruction);
     write(fd, instruction, len);
     close(fd);*/
-    write_to_file("instruction_file_path", instruction);
+    write_to_file(instruction_file_path, instruction);
 
     if (daemon_pid > 0){ // if the daemon_pid was read correctly from file
         // we send a signal to the daemon to inform it that a command has been written to file 
@@ -139,7 +139,7 @@ void process_output_from_daemon(int signo) {
     char *buf = (char*) malloc(4000);
     read(fd, buf, 4000);
     close(fd); */
-    char* buf = read_from_file("daemon_pid_file_path");
+    char* buf = read_from_file(daemon_pid_file_path);
 
     // print output to console
     printf("%s\n", buf);
@@ -152,9 +152,10 @@ void write_pid_to_file(){
     int pid = getpid();
     itoa(pid, pidstring);
     // TODO: use write_to_file function instead when implemented
-    int fd = open(da_pid_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);    
+    /*int fd = open(da_pid_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);    
     write(fd, pidstring, 10); // write pid to file
-    close(fd);
+    close(fd);*/
+    write_to_file(da_pid_file_path, pidstring);
 }
 
 int main(int argc, char** argv)
