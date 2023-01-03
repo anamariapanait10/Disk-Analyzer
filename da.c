@@ -5,19 +5,25 @@
 #include <stdbool.h>
 #include <signal.h>
 #include <unistd.h> // for write/close/sleep functions
+#include <sys/types.h> //pid_t type
+#include <inttypes.h>
+#include <iso646.h>
+#include <errno.h> 
 #include "constants.h" // header for command-constants and paths
 #include "utils.h" // header for map related functions and itoa
 #include "process_instructions.h"
+#include "functions.h"
 
 int daemon_pid; // daemon_pid is the pid read from the corresponding file
 
 void write_instruction_to_daemon(char* instruction){   
     create_dir_if_not_exists(instruction_file_path);
     // TODO: use write_to_file function instead when implemented
-    int fd = open(instruction_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);    
+    /*int fd = open(instruction_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);    
     int len = strlen(instruction);
     write(fd, instruction, len);
-    close(fd);
+    close(fd);*/
+    write_to_file(instruction_file_path, instruction);
 
     if (daemon_pid > 0){ // if the daemon_pid was read correctly from file
         // we send a signal to the daemon to inform it that a command has been written to file 
@@ -62,7 +68,7 @@ void start_daemon_if_not_running() {
 
 void process_output_from_daemon(int signo) {
     // TODO: use read_from_file function instead when implemented
-    int fd = open(daemon_pid_file_path, O_RDONLY);
+    /*int fd = open(daemon_pid_file_path, O_RDONLY);
      if(fd < 0){
         perror("Couldn't open daemon output file\n");
         return;
@@ -70,7 +76,8 @@ void process_output_from_daemon(int signo) {
     // TODO: change 4000 to the exact number of bytes of the file
     char *buf = (char*) malloc(4000);
     read(fd, buf, 4000);
-    close(fd);
+    close(fd); */
+    char* buf = read_from_file(daemon_pid_file_path);
 
     // print output to console
     printf("%s\n", buf);
@@ -83,9 +90,10 @@ void write_pid_to_file(){
     int pid = getpid();
     itoa(pid, pidstring);
     // TODO: use write_to_file function instead when implemented
-    int fd = open(da_pid_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);    
+    /*int fd = open(da_pid_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);    
     write(fd, pidstring, 10); // write pid to file
-    close(fd);
+    close(fd);*/
+    write_to_file(da_pid_file_path, pidstring);
 }
 
 int main(int argc, char** argv)
