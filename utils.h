@@ -4,9 +4,32 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
+#include <fts.h>
+#include <pthread.h>
+#include "constants.h"
 
 int task_id;
 struct my_map *tasks;
+struct thr_node **list_head;
+
+/*
+tasks
+{   
+    0: (10, "/ceva")
+    1: (1, "/home/ana"), (11, "/dsa")
+    2: (2, "/home/so")
+}
+
+lista[
+    (id, prioritate, th1, done_status, files, dirs, total_dirs, details)
+]
+*/
+
+struct thread_args {
+    char *path;
+    int priority;
+};
 
 int get_next_task_id(){
     return ++task_id;
@@ -17,6 +40,38 @@ void create_dir_if_not_exists(const char *path){
     if (stat(path, &st) == -1) {
         mkdir("/tmp/disk-analyzer", 0777);
     }
+}
+
+int compare(const FTSENT **one, const FTSENT **two)
+{
+    return (strcmp((*one)->fts_name, (*two)->fts_name));
+}
+
+int count_dirs(char *path){
+    int count = 0;
+    FTS *file_system = NULL;
+    FTSENT *node = NULL;
+
+    char *paths[] = {path, NULL};
+
+    if (!(file_system = fts_open(paths, FTS_COMFOLLOW | FTS_NOCHDIR, &compare))){
+        perror(NULL);
+        return errno;
+    }
+
+    if (file_system != NULL){
+        while ((node = fts_read(file_system)) != NULL){
+            switch (node->fts_info){
+                case FTS_D:;
+                    count++;
+                    break;
+                default:
+                    break;
+            }
+        }
+        fts_close(file_system);
+    }
+    return count;
 }
 
 // hash
@@ -49,6 +104,17 @@ struct fd_node *map_find(struct my_map *m, int key) {
     return NULL;
 }
 
+int map_find_task(struct my_map *m, char *path){
+    for(int i = 0; i < m->length; i++){
+        if(m->lista[i] != NULL){
+            for (struct fd_node *nod = m->lista[i]; nod != NULL; nod = nod->next) {
+                if (strcmp((char*)nod->val, path) == 0)
+                    return nod->id;
+            }
+        }
+    }
+    return -1;
+}
 
 void map_insert(struct my_map *m, int key, void *val) {
     int mod = key % m->length;
@@ -95,70 +161,78 @@ void map_clear(struct my_map *m){
     free(m->lista);
 }
 
-typedef struct thr_node {
+struct thr_node {
     int id;
-    
     int priority;
+    pthread_t *thr;
+    char *done_status;
+    int files, dirs, total_dirs;
+    struct thr_node *next;
+};
 
-    pthread_t thr;
- 
-    struct thr_node* next;
- 
-} thr_Node;
- 
-Node* newNode(int id, int p, pthread_t thr)
-{
-    thr_Node* aux = (thr_Node*)malloc(sizeof(thr_Node));
-    aux->id = id;
-    aux->priority = p;
-    aux->thr = thr;
-    aux->next = NULL;
- 
-    return aux;
-}
- 
-// Removes the element with the
-// highest priority from the list
-void pop(thr_Node** head)
-{
-    thr_Node* aux = *head;
-    (*head) = (*head)->next;
-    free(aux);
+void list_init(){
+    list_head = malloc(sizeof(struct thr_node*));
+    *list_head = NULL;
 }
 
-void push(thr_Node** head, int d, int p, pthread_t thr)
-{
-    thr_Node* start = (*head);
- 
-    thr_Node* aux = newNode(d, p, thr);
- 
-    // If the head of list has lesser
-    // priority than new node, insert new
-    // node before head node and change head node.
-    if ((*head)->priority > p) {
-        aux->next = *head;
-        (*head) = aux;
-    }
-    else {
- 
-        // Traverse the list and find the
-        // position to insert the new node
-        while (start->next != NULL &&
-            start->next->priority < p) {
-            start = start->next;
+void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *thr){
+    struct thr_node *new_node = (struct thr_node*) malloc(sizeof(struct thr_node));
+    
+    new_node->id = id;
+    new_node->priority = priority;
+    new_node->thr = thr;
+    new_node->done_status = (char*)malloc(15);
+    new_node->done_status = "preparing";
+    new_node->files = 0;
+    new_node->dirs = 0;
+    // find out total number of subdirectories
+    struct fd_node *node = map_find(tasks, id);
+    char *path = (char*)node->val;
+    new_node->total_dirs = count_dirs(path);
+
+    new_node->next = *head_ref;
+    *head_ref = new_node;
+}
+
+void list_delete(struct thr_node **head_ref, int key){
+    struct thr_node *aux = *head_ref, *prev;
+
+    if(aux != NULL && aux->id == key){
+        *head_ref = aux->next;
+        free(aux);
+    } else {
+        while(aux != NULL && aux->id != key){
+            prev = aux;
+            aux = aux->next;
         }
- 
-        // Either at the end of the list
-        // or at required position
-        aux->next = start->next;
-        start->next = aux;
+
+        if(aux != NULL){
+            prev->next = aux->next;
+            free(aux);
+        }
     }
 }
- 
-// Function to check if list is empty
-int isEmpty(thr_Node** head)
-{
-    return (*head) == NULL;
+
+struct thr_node* list_find_by_key(struct thr_node** head_ref, int key){
+    struct thr_node *current = *head_ref;
+    while(current != NULL){
+        if(current->id == key){
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
+}
+
+struct thr_node* list_find_by_thr(struct thr_node** head_ref, pthread_t thr){
+    struct thr_node *current = *head_ref;
+    while(current != NULL){
+        if(pthread_equal(*(current->thr), thr)){
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
 }
 
 void* reverse (char *v)
@@ -222,6 +296,177 @@ char *convert_size_to_standard_unit(float bytes){
     }
 
     return size;
+}
+
+
+char *read_from_file(const char *path, char *error_msg){
+    int fd = open(path, O_RDONLY);
+    if(fd < 0){
+        perror(error_msg);
+        exit(-1);
+    }
+
+    struct stat sb;
+    if(stat(path, &sb)) {
+        perror(path);
+        exit(-1);
+    }
+
+    char *buf = (char*) malloc(sb.st_size);
+    read(fd, buf, sb.st_size);
+    close(fd);
+
+    return buf;
+}
+
+void update_done_status(struct thr_node *node){
+    float percent = node->dirs * 100 * 1./ node->total_dirs;
+    if(percent == 100){
+        node->done_status = "done";
+    } else {
+        sprintf(node->done_status, "%.1f%% in progress", percent);
+    }
+}
+
+
+void* disk_analyzer(void *args){   
+    struct thread_args *th_args = (struct thread_args*)args;
+    char *path = th_args->path;
+
+    // set thread priority
+    int policy;
+    struct sched_param param;
+    pthread_getschedparam(pthread_self(), &policy, &param);
+    param.sched_priority = sched_get_priority_max(policy) - (th_args->priority-1);
+    pthread_setschedparam(pthread_self(), policy, &param);
+
+    size_t max_path = pathconf(".", _PC_PATH_MAX);
+    char *buf = (char *)malloc(max_path);
+
+    struct thr_node *n = list_find_by_key(list_head, pthread_self());
+    char *output_path;
+    sprintf(output_path, "%s%d%s", output_file_path_prefix, n->id, ".txt");
+    int fd = open(output_path, O_CREAT | O_TRUNC | O_WRONLY | O_APPEND, S_IRWXU | S_IRWXG | S_IRWXO);
+
+    struct my_map m;
+    map_init(&m, 10);
+    // postorder
+    FTS *file_system = NULL;
+    FTSENT *node = NULL;
+
+    char *paths[] = {path, NULL};
+
+    if (!(file_system = fts_open(paths, FTS_COMFOLLOW | FTS_NOCHDIR, &compare))){
+        perror(NULL);
+        exit(-1);
+    }
+
+    if (file_system != NULL){
+        while ((node = fts_read(file_system)) != NULL){
+            switch (node->fts_info){
+                case FTS_D:;
+                    struct fd_node *nod = map_find(&m, node->fts_statp->st_ino);
+                    if (nod == NULL){
+                        float *val = (float *)malloc(sizeof(float));
+                        *val = node->fts_statp->st_size;
+                        map_insert(&m, node->fts_statp->st_ino, val);
+                    }
+                    break;
+                case FTS_F:
+                case FTS_SL:;
+                    struct fd_node *nod1 = map_find(&m, node->fts_parent->fts_statp->st_ino);
+                    if (nod1 != NULL){
+                        *((float *)nod1->val) += node->fts_statp->st_size;
+                    }
+                    n->files++;
+                    break;
+                case FTS_DP:;
+                    struct fd_node *nod2 = map_find(&m, node->fts_parent->fts_statp->st_ino);
+                    if (nod2 != NULL){
+                        *((float *)nod2->val) += *((float *)map_find(&m, node->fts_statp->st_ino)->val);
+                    }
+                    n->dirs++;
+                    break;
+                default:
+                    break;
+                update_done_status(n);
+            }
+        }
+        fts_close(file_system);
+    }
+
+    // TODO: change 10000 to a better number and move it to constants file
+    char *line = (char *)malloc(10000);
+    // write the first line
+    sprintf(line, "\tPath\tUsage\tSize\tAmount\n");
+    write(fd, line, strlen(line));
+
+    int total_size = 0;                                                                 // needed to calculate the percentage
+    char *size = (char *)malloc(20);                                                    // needed to keep the size of the current directory
+    char *last_dir = (char *)malloc(max_path), *current_dir = (char *)malloc(max_path); // needed for the prints of '|' between the groups of directories
+    char *p = (char *)malloc(max_path);                                                 // needed to print only a part of the path string
+    char *indx = (char *)malloc(max_path);                                              // needed for extracting the first directory from a path
+
+    // preorder
+    file_system = NULL;
+    node = NULL;
+    char *paths2[] = {path, NULL};
+    if (!(file_system = fts_open(paths2, FTS_COMFOLLOW | FTS_NOCHDIR, &compare))){
+        perror(NULL);
+        exit(-1);
+    }
+
+    if (file_system != NULL){
+        while ((node = fts_read(file_system)) != NULL){
+            switch (node->fts_info){
+                case FTS_D:
+                    size = convert_size_to_standard_unit(*((float *)map_find(&m, node->fts_statp->st_ino)->val));
+
+                    if (strcmp(node->fts_path, path))
+                    { // if current path is not root
+
+                        // we don't print the root folder for its directories
+                        strcpy(p, node->fts_path);
+                        p += strlen(path); // skiping the root folder from the paths
+                        strcat(p, "/");    // adding a final '/' to distinguish them as folders
+
+                        // extract the first directory from a path in order to group them by this later
+                        indx = strchr(p + 1, '/');
+                        int n = (int)(indx - p) - 1;
+                        strncpy(current_dir, p + 1, n);
+                        current_dir[n] = '\0';
+
+                        float percentage = (float)*((float *)map_find(&m, node->fts_statp->st_ino)->val) * 100 / (float)total_size;
+
+                        if (strcmp(last_dir, current_dir))
+                        {
+                            // prints an extra line with '|' before printing the current line
+                            // in order to group the directories
+                            sprintf(line, "|\n|-%s\t%.1f%%\t%s\t%s\n", p, percentage, size, get_progress(percentage));
+                        }
+                        else
+                        {
+                            sprintf(line, "|-%s\t%.1f%%\t%s\t%s\n", p, percentage, size, get_progress(percentage));
+                        }
+                        strcpy(last_dir, current_dir);
+                    }
+                    else
+                    { // root directory
+                        total_size = *((float *)map_find(&m, node->fts_statp->st_ino)->val);
+                        sprintf(line, "%s/\t100%%\t%s\t%s\n", node->fts_path, size, get_progress(100));
+                    }
+                    write(fd, line, strlen(line));
+                    break;
+                default:
+                    break;
+            }
+        }
+        fts_close(file_system);
+    }
+
+    map_clear(&m);
+    close(fd);
+    n->done_status = "done";
 }
 
 #endif

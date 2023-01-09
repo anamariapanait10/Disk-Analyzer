@@ -25,7 +25,7 @@ void write_instruction_to_daemon(char* instruction){
         kill(daemon_pid, SIGUSR1); 
         // we wait a second for the daemon to process the instruction and give the
         // signal back
-        sleep(1);
+        sleep(2);
     } else {
         fprintf(stderr, "Couldn't send instruction to daemon because it is not running\n");
         exit(-1);
@@ -35,7 +35,9 @@ void write_instruction_to_daemon(char* instruction){
 pid_t read_daemon_pid_from_file() {
     int fd = open(daemon_pid_file_path, O_RDONLY);
      if(fd < 0){ // daemon never started yet
+        tasks = malloc(sizeof(struct my_map));
         map_init(tasks, 10);
+        list_init();
         return -1;
     }
     char *buf = (char*) malloc(10); // pid from file with maximum length of 10
@@ -62,24 +64,9 @@ void start_daemon_if_not_running() {
 }
 
 void process_output_from_daemon(int signo) {
-    // TODO: use read_from_file function instead when implemented
-    int fd = open(daemon_pid_file_path, O_RDONLY);
-     if(fd < 0){
-        perror("Couldn't open daemon output file\n");
-        return;
-    }
-
-    struct stat sb;
-    if(stat(daemon_pid_file_path, &sb)) {
-        perror(daemon_pid_file_path);
-        exit(0);
-    }
-    char *buf = (char*) malloc(sb.st_size);
-    read(fd, buf, sb.st_size);
-    close(fd);
-
+    char *res = read_from_file(output_file_path, "Couldn't open daemon output file\n");
     // print output to console
-    printf("%s\n", buf);
+    printf("%s\n", res);
 }
 
 void write_pid_to_file(){
@@ -131,9 +118,7 @@ int main(int argc, char** argv)
                 return 0;
             } else { // ADD command
                 char* priority = malloc(7);
-                int fd = open(argv[2], O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);
-                if (fd < 0)
-                    printf("Invalid path!\n");
+                // TODO check is valid path 
                 if (!strcmp(argv[4], "1"))
                     strcpy(priority, "low");
                 else if (!strcmp(argv[4], "2"))

@@ -4,7 +4,7 @@
 #include <signal.h>
 #include <unistd.h> // for write/close/sleep functions
 #include "process_instructions.h" // header with functions for processing the instructions
-
+#include "utils.h"
 
 void write_output_to_da(char* output){   
     // TODO: use write_to_file function instead when implemented
@@ -24,7 +24,7 @@ void process_input_from_da(int signo) {
     // TODO: change 1000000/500 to the exact number of bytes needed
     char *res = (char*) malloc(1000000);
     char *instruction = (char*) malloc(500);
-    int fd = open(instruction_file_path, O_RDONLY);
+    fd = open(instruction_file_path, O_RDONLY);
     read(fd, instruction, 500);
     get_output_of_instruction(instruction, res);
     write_output_to_da(res);
@@ -77,6 +77,20 @@ static void daemonize(){
     close(fd);
 
     signal(SIGUSR1, process_input_from_da);
+
+    while(1){
+        // wait for all threads to finish
+        struct thr_node *current = *list_head;
+        void *res;
+        while(current != NULL){
+            if(pthread_join(*current->thr, &res)){
+                perror(NULL);
+                exit(-1);
+            }
+            current = current->next;
+        
+        }
+    }    
 }
 
 
