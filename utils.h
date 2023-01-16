@@ -9,9 +9,9 @@
 #include <pthread.h>
 #include "constants.h"
 
-int task_id;
-struct my_map *tasks;
-struct thr_node **list_head;
+extern int task_id;
+extern struct my_map *tasks;
+extern struct thr_node **list_head;
 
 /*
 tasks

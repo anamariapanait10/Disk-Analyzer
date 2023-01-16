@@ -35,10 +35,8 @@ void write_instruction_to_daemon(char* instruction){
 pid_t read_daemon_pid_from_file() {
     int fd = open(daemon_pid_file_path, O_RDONLY);
      if(fd < 0){ // daemon never started yet
-        tasks = malloc(sizeof(struct my_map));
-        map_init(tasks, 10);
-        list_init();
-        return -1;
+        perror("Daemon hasn't started");
+        return errno;
     }
     char *buf = (char*) malloc(10); // pid from file with maximum length of 10
     read(fd, buf, 10);
@@ -56,11 +54,8 @@ bool is_daemon_running() {
     return daemon_pid > 0;
 }
 
-void start_daemon_if_not_running() {
-    if(!is_daemon_running()){
-        start_daemon();
-        daemon_pid = read_daemon_pid_from_file();
-    }
+void get_daemon_pid() {
+    daemon_pid = read_daemon_pid_from_file();
 }
 
 void process_output_from_daemon(int signo) {
@@ -90,7 +85,9 @@ int main(int argc, char** argv)
     // to whom to give the signal back
     write_pid_to_file();
 
-    start_daemon_if_not_running();
+    get_daemon_pid();
+
+    printf("%d", daemon_pid);
 
     char* instruction = malloc(INSTR_LENGTH);
     if (argc == 1) {
