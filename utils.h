@@ -28,6 +28,7 @@ lista[
 
 
 void log_daemon(char *msg){
+    //pthread_mutex_lock(pthread_mutex_t *mutex)
     int fd = open(log_file_path, O_CREAT | O_APPEND | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
     if (fd < 0){
         perror("Couldn't open log file\n");
@@ -64,7 +65,7 @@ int count_dirs(char *path){
         perror(NULL);
         return errno;
     }
-
+    log_daemon("Inainte de parcurgere\n");
     if (file_system != NULL){
         while ((node = fts_read(file_system)) != NULL){
             switch (node->fts_info){
@@ -77,6 +78,7 @@ int count_dirs(char *path){
         }
         fts_close(file_system);
     }
+    log_daemon("Dupa parcurgere\n");
     return count;
 }
 
@@ -161,6 +163,19 @@ void map_print_int(struct my_map *m){
     }
 }
 
+void map_print_char(struct my_map *m, char *res){
+    for(int i = 0; i < m->length; i++){
+        sprintf(res, "%d: ", i);
+        if(m->lista[i] != NULL){
+            struct fd_node *nod;
+            for (nod = m->lista[i]; nod != NULL; nod = nod->next) {
+                sprintf(res, "(%d, %s) ", nod->id, (char*)nod->val);
+            }
+        }
+        sprintf(res, "\n");
+    }
+}
+
 void map_clear(struct my_map *m){
     for(int i = 0; i < m->length; i++)
         free(m->lista[i]);
@@ -195,11 +210,14 @@ void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *th
     // find out total number of subdirectories
     struct fd_node *node = map_find(tasks, id);
     log_daemon("In list_insert, dupa map_find\n");
-    char *path = (char*)node->val;
+    char *path = (char*)(node->val);
+    log_daemon("Cast\n");
     new_node->total_dirs = count_dirs(path);
+    log_daemon("Dupa count_dirs\n");
 
     new_node->next = *head_ref;
     *head_ref = new_node;
+    log_daemon("La final list_insert\n");
 }
 
 void list_delete(struct thr_node **head_ref, int key){
@@ -248,12 +266,14 @@ struct thr_node* list_find_by_thr(struct thr_node** head_ref, pthread_t thr){
 }
 
 void list_print(struct thr_node** head_ref, char *res){
+    res[0] = '\0';
     struct thr_node *current = (struct thr_node*)malloc(sizeof(struct thr_node));
     current = *list_head;
     while(current != NULL){
         sprintf(res + strlen(res), "Id: %d, ", current->id);
         current = current->next;
     }
+    sprintf(res + strlen(res), "\n");
 }
 
 void* reverse (char *v){
@@ -270,7 +290,6 @@ void* reverse (char *v){
 
 void itoa(int n, char *s){
     int i = 0;
-
     // generate digits in reverse order
     do {
         s[i++] = n % 10 + '0';
@@ -384,9 +403,9 @@ void* disk_analyzer(void *args){
     char *s = malloc(1000);
     list_print(list_head, s);
     log_daemon(s);
+
+    sprintf(output_path, "%s_%d.txt", output_file_path_prefix, n->id);   
     
-    s = strerror(sprintf(output_path, "%s_%d.txt", output_file_path_prefix, n->id));   
-    log_daemon(s);
     log_daemon("After output_path malloc\n");
     int fd = open(output_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
     if(fd < 0){
@@ -408,8 +427,12 @@ void* disk_analyzer(void *args){
         exit(-1);
     }
     log_daemon("Before postorder traversal\n");
+    sprintf(s, "%d", (file_system==NULL));
+    log_daemon(s);
     if (file_system != NULL){
         while ((node = fts_read(file_system)) != NULL){
+            //sprintf(s, "%d", node->fts_info);
+            //log_daemon(s);
             switch (node->fts_info){
                 case FTS_D:;
                     struct fd_node *nod = map_find(&m, node->fts_statp->st_ino);
@@ -446,7 +469,7 @@ void* disk_analyzer(void *args){
     // TODO: change 10000 to a better number and move it to constants file
     char *line = (char *)malloc(10000);
     // write the first line
-    sprintf(line, "\tPath\tUsage\tSize\tAmount\n");
+    sprintf(line, "    Path\t\tUsage\tSize\t\tAmount\n");
     write(fd, line, strlen(line));
 
     int total_size = 0;                                                                 // needed to calculate the percentage
@@ -470,8 +493,7 @@ void* disk_analyzer(void *args){
                 case FTS_D:
                     size = convert_size_to_standard_unit(*((float *)map_find(&m, node->fts_statp->st_ino)->val));
 
-                    if (strcmp(node->fts_path, path))
-                    { // if current path is not root
+                    if (strcmp(node->fts_path, path)){ // if current path is not root
 
                         // we don't print the root folder for its directories
                         strcpy(p, node->fts_path);
@@ -486,20 +508,15 @@ void* disk_analyzer(void *args){
 
                         float percentage = (float)*((float *)map_find(&m, node->fts_statp->st_ino)->val) * 100 / (float)total_size;
 
-                        if (strcmp(last_dir, current_dir))
-                        {
+                        if (strcmp(last_dir, current_dir)){
                             // prints an extra line with '|' before printing the current line
                             // in order to group the directories
                             sprintf(line, "|\n|-%s\t%.1f%%\t%s\t%s\n", p, percentage, size, get_progress(percentage));
-                        }
-                        else
-                        {
+                        } else {
                             sprintf(line, "|-%s\t%.1f%%\t%s\t%s\n", p, percentage, size, get_progress(percentage));
                         }
                         strcpy(last_dir, current_dir);
-                    }
-                    else
-                    { // root directory
+                    } else { // root directory
                         total_size = *((float *)map_find(&m, node->fts_statp->st_ino)->val);
                         sprintf(line, "%s/\t100%%\t%s\t%s\n", node->fts_path, size, get_progress(100));
                     }

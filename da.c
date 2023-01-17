@@ -24,7 +24,7 @@ void write_instruction_to_daemon(char* instruction){
         kill(daemon_pid, SIGUSR1); 
         // we wait a second for the daemon to process the instruction and give the
         // signal back
-        sleep(0.5);
+        sleep(1);
     } else {
         fprintf(stderr, "Couldn't send instruction to daemon because it is not running\n");
         exit(-1);
