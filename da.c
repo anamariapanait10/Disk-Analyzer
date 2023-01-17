@@ -108,11 +108,11 @@ int main(int argc, char** argv)
                 char* priority = malloc(7);
                 // TODO check is valid path 
                 if (!strcmp(argv[4], "1"))
-                    strcpy(priority, "low");
+                    strcpy(priority, "1");
                 else if (!strcmp(argv[4], "2"))
-                    strcpy(priority, "medium");
+                    strcpy(priority, "2");
                 else if (!strcmp(argv[4], "3"))
-                    strcpy(priority, "high");
+                    strcpy(priority, "3");
                 else printf("Invalid arguments for --add command.\nUse --help command for more information.\n");
                 sprintf(instruction, "%s\n%s\n%s\n", ADD, argv[2], priority);
             }

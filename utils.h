@@ -202,7 +202,7 @@ void list_init(){
 void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *thr){
      pthread_mutex_lock(&mtx_lock);
     struct thr_node *new_node = (struct thr_node*) malloc(sizeof(struct thr_node));
-    
+   
     new_node->id = id;
     new_node->priority = priority;
     new_node->thr = thr;
@@ -383,6 +383,9 @@ void* disk_analyzer(void *args){
     pthread_t *pth = malloc(sizeof(pthread_t));
     *pth = pthread_self();
     log_daemon("Before list_insert\n");
+     char nr[10];
+    sprintf(nr, "%d\n",pri);
+    log_daemon(nr);
     list_insert(list_head, id, pri, pth);
 
     log_daemon("Before set priority to thread\n");
@@ -457,6 +460,9 @@ void* disk_analyzer(void *args){
                         *((float *)nod2->val) += *((float *)map_find(&m, node->fts_statp->st_ino)->val);
                     }
                     n->dirs++;
+                    // char nr[10];
+                    // itoa(n->dirs,nr);
+                    // log_daemon(nr);
                     break;
                 default:
                     break;
@@ -529,6 +535,9 @@ void* disk_analyzer(void *args){
         }
         fts_close(file_system);
     }
+    char nrDir[1000];
+    itoa(list_find_by_thr(list_head,pthread_self())->dirs, nrDir);
+    log_daemon(nrDir);
     log_daemon("After preorder traversal\n");
     map_clear(&m);
     close(fd);

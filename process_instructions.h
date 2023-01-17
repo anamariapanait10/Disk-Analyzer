@@ -41,6 +41,9 @@ void da_add(char *path, char *priority, char *res){
         // create new thread for analyzing the disk
         struct thread_args *args = malloc(sizeof(struct thread_args));
         args->path = path;
+         char nr[10];
+        sprintf(nr, "%d\n",atoi(priority));
+        log_daemon(priority);
         args->priority = atoi(priority);
         args->id = id;
         log_daemon("Before pthread_create\n");
@@ -103,27 +106,15 @@ void da_info(int id, char *res){
     if(n == NULL){
         sprintf(res, "No existing analysis for task ID %d, no info can be displayed", id);
     } else {
-        sprintf(res, "ID\tPRI\tPath\tDone Status\tDetails\n");
-        for(int i = 0; i < tasks->length; i++){
-            if(tasks->lista[i] != NULL){
-                struct fd_node *nod;
-                for (nod = tasks->lista[i]; nod != NULL; nod = nod->next) {
-                    if(nod->id == id){
-                        struct thr_node *n = list_find_by_key(list_head, nod->id);
-                        char *priority = (char*)malloc(3);
-                        priority = "***";
-                        priority += 3 - n->priority;
-                        struct fd_node *node = map_find(tasks, nod->id);
-                        char *path = (char*)node->val;
-                        sprintf(res + strlen(res), "%d\t%s\t%s\t%s\t%d files, %d dirs) ", nod->id, priority, path, n->done_status, n->files, n->dirs);
-                        break;
-                    }
-                }
-            }
-            sprintf(res + strlen(res), "\n");
+         sprintf(res, "ID\tPRI\tPath\tDone Status\tDetails\n");
+         char priority[3]="***";
+         struct fd_node *node = map_find(tasks, n->id);
+         char *path = (char*)node->val;
+         sprintf(res + strlen(res), "%d\t%s\t%s\t%s\t%d files, %d dirs\n", n->id, priority+ (3-n->priority), path, n->done_status, n->files, n->dirs);
+       
         }
     }
-}
+
 
 void da_list(char *res){
     log_daemon("Reached da_list function\n");
@@ -133,15 +124,13 @@ void da_list(char *res){
             struct fd_node *nod;
             for (nod = tasks->lista[i]; nod != NULL; nod = nod->next) {
                 struct thr_node *n = list_find_by_key(list_head, nod->id);
-                char *priority = (char*)malloc(3);
-                priority = "***";
-                priority += 3 - n->priority;
+                char priority[3]="***";
                 struct fd_node *node = map_find(tasks, nod->id);
                 char *path = (char*)node->val;
-                sprintf(res + strlen(res), "%d\t%s\t%s\t%s\t%d files, %d dirs) ", nod->id, priority, path, n->done_status, n->files, n->dirs);
+                sprintf(res + strlen(res), "%d\t%s\t%s\t%s\t%d files, %d dirs\n", nod->id, priority+ (3-n->priority), path, n->done_status, n->files, n->dirs);
             }
         }
-        sprintf(res + strlen(res), "\n");
+        
     }
 }
 
@@ -173,6 +162,7 @@ void get_output_of_instruction(char *instruction, char *res){
             path = strtok(NULL, "\n");
             char *priority = malloc(PATH_MAX);
             priority = strtok(NULL, "\n");
+            log_daemon(priority);
             da_add(path, priority, res);
             break;
         case 2: // SUSPEND command
