@@ -13,6 +13,9 @@ int task_id;
 struct my_map *tasks;
 struct thr_node **list_head;
 
+
+pthread_mutex_t mtx_lock;
+
 /*
 tasks
 {   
@@ -197,6 +200,7 @@ void list_init(){
 }
 
 void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *thr){
+     pthread_mutex_lock(&mtx_lock);
     struct thr_node *new_node = (struct thr_node*) malloc(sizeof(struct thr_node));
     
     new_node->id = id;
@@ -206,18 +210,15 @@ void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *th
     new_node->done_status = "preparing";
     new_node->files = 0;
     new_node->dirs = 0;
-    log_daemon("In list_insert, dupa atribuiri\n");
     // find out total number of subdirectories
     struct fd_node *node = map_find(tasks, id);
-    log_daemon("In list_insert, dupa map_find\n");
     char *path = (char*)(node->val);
-    log_daemon("Cast\n");
     new_node->total_dirs = count_dirs(path);
-    log_daemon("Dupa count_dirs\n");
 
     new_node->next = *head_ref;
     *head_ref = new_node;
-    log_daemon("La final list_insert\n");
+     pthread_mutex_unlock(&mtx_lock);
+
 }
 
 void list_delete(struct thr_node **head_ref, int key){
@@ -340,14 +341,14 @@ char *convert_size_to_standard_unit(float bytes){
 char *read_from_file(const char *path, char *error_msg){
     int fd = open(path, O_RDONLY);
     if(fd < 0){
-        perror(error_msg);
-        exit(-1);
+        log_daemon("Eroare deschidere fisier");
+        //exit(-1);
     }
 
     struct stat sb;
     if(stat(path, &sb)) {
         perror(path);
-        exit(-1);
+        //exit(-1);
     }
 
     char *buf = (char*) malloc(sb.st_size);
@@ -411,7 +412,7 @@ void* disk_analyzer(void *args){
     if(fd < 0){
         log_daemon("Could not open output path\n");
         perror("Could not open output path");
-        exit(-1);
+       // exit(-1);
     }
     log_daemon("After output_path open\n");
     struct my_map m;
@@ -424,7 +425,7 @@ void* disk_analyzer(void *args){
 
     if (!(file_system = fts_open(paths, FTS_COMFOLLOW | FTS_NOCHDIR, &compare))){
         perror(NULL);
-        exit(-1);
+       // exit(-1);
     }
     log_daemon("Before postorder traversal\n");
     sprintf(s, "%d", (file_system==NULL));
@@ -484,7 +485,7 @@ void* disk_analyzer(void *args){
     char *paths2[] = {path, NULL};
     if (!(file_system = fts_open(paths2, FTS_COMFOLLOW | FTS_NOCHDIR, &compare))){
         perror(NULL);
-        exit(-1);
+      //  exit(-1);
     }
 
     if (file_system != NULL){
