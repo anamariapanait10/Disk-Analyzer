@@ -2,36 +2,35 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <limits.h>
-#include <errno.h>
+#include <string.h>
 
 int main()
 {
-   int num;
-   FILE *fptr;
+    int num;
+    FILE* fptr;
 
-   char crtDir[PAHT_MAX]; //current directory
-   char cmd[PAHT_MAX] = "PATH=$PATH:"; //command to be added in bshcr
+    char crtDir[PATH_MAX]; //directorul curent
+    char cmd[PATH_MAX] = "PATH=$PATH:"; //comanda de adaugat in bshcr
 
-   if(getcwd(crtDir, sizeOf(crtDir)) == NULL) 
-   {
- 	perror("Error getting current directory");
-        return errno;
-   }
+    if (getcwd(crtDir, sizeof(crtDir)) == NULL) 
+    {
+        printf("Error getting current directory");
+        exit(1);
+    }
 
-   fptr = fopen("~/.bashrc","a"); // open bashrc in append mode
+    fptr = fopen("~/.bashrc", "a"); // deschidere bashrc in modul append
+    if (fptr == NULL)
+    {
+        printf("Error!");
+        exit(1);
+    }
 
-   if(fptr == NULL) 
-   {
-      perror("Error opening bashrc!");   
-      return errno;             
-   }
+    strncat(cmd, crtDir, (sizeof(cmd) - strlen(cmd))); //compute command
 
-   strncat(cmd, crtDir, (sizeof(cmd) - strlen(cmd))); //compute command
+    fwrite(cmd, 1, sizeof(cmd), fptr);//scriere comanda in fisier
 
-   fwrite(cmd, 1, sizeof(cmd), fptr); // write command to file
-
-   fclose(fptr);
+    fclose(fptr);
 
 
-   return 0;
+    return 0;
 }
