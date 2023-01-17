@@ -9,9 +9,9 @@
 #include <pthread.h>
 #include "constants.h"
 
-extern int task_id;
-extern struct my_map *tasks;
-extern struct thr_node **list_head;
+int task_id;
+struct my_map *tasks;
+struct thr_node **list_head;
 
 /*
 tasks
@@ -26,10 +26,15 @@ lista[
 ]
 */
 
-struct thread_args {
-    char *path;
-    int priority;
-};
+
+void log_daemon(char *msg){
+    int fd = open(log_file_path, O_CREAT | O_APPEND | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
+    if (fd < 0){
+        perror("Couldn't open log file\n");
+    }
+    write(fd, msg, strlen(msg));
+    close(fd);
+}
 
 int get_next_task_id(){
     return ++task_id;
@@ -38,12 +43,13 @@ int get_next_task_id(){
 void create_dir_if_not_exists(const char *path){
     struct stat st = {0};
     if (stat(path, &st) == -1) {
+        mode_t oldmask = umask(0);
         mkdir("/tmp/disk-analyzer", 0777);
+        umask(oldmask);
     }
 }
 
-int compare(const FTSENT **one, const FTSENT **two)
-{
+int compare(const FTSENT **one, const FTSENT **two){
     return (strcmp((*one)->fts_name, (*two)->fts_name));
 }
 
@@ -185,8 +191,10 @@ void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *th
     new_node->done_status = "preparing";
     new_node->files = 0;
     new_node->dirs = 0;
+    log_daemon("In list_insert, dupa atribuiri\n");
     // find out total number of subdirectories
     struct fd_node *node = map_find(tasks, id);
+    log_daemon("In list_insert, dupa map_find\n");
     char *path = (char*)node->val;
     new_node->total_dirs = count_dirs(path);
 
@@ -195,7 +203,9 @@ void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *th
 }
 
 void list_delete(struct thr_node **head_ref, int key){
-    struct thr_node *aux = *head_ref, *prev;
+    struct thr_node *aux = (struct thr_node*)malloc(sizeof(struct thr_node));
+    aux = *list_head;
+    struct thr_node *prev = (struct thr_node*)malloc(sizeof(struct thr_node));
 
     if(aux != NULL && aux->id == key){
         *head_ref = aux->next;
@@ -214,7 +224,8 @@ void list_delete(struct thr_node **head_ref, int key){
 }
 
 struct thr_node* list_find_by_key(struct thr_node** head_ref, int key){
-    struct thr_node *current = *head_ref;
+    struct thr_node *current = (struct thr_node*)malloc(sizeof(struct thr_node));
+    current = *list_head;
     while(current != NULL){
         if(current->id == key){
             return current;
@@ -225,7 +236,8 @@ struct thr_node* list_find_by_key(struct thr_node** head_ref, int key){
 }
 
 struct thr_node* list_find_by_thr(struct thr_node** head_ref, pthread_t thr){
-    struct thr_node *current = *head_ref;
+    struct thr_node *current = (struct thr_node*)malloc(sizeof(struct thr_node));
+    current = *list_head;
     while(current != NULL){
         if(pthread_equal(*(current->thr), thr)){
             return current;
@@ -235,11 +247,18 @@ struct thr_node* list_find_by_thr(struct thr_node** head_ref, pthread_t thr){
     return NULL;
 }
 
-void* reverse (char *v)
-{
+void list_print(struct thr_node** head_ref, char *res){
+    struct thr_node *current = (struct thr_node*)malloc(sizeof(struct thr_node));
+    current = *list_head;
+    while(current != NULL){
+        sprintf(res + strlen(res), "Id: %d, ", current->id);
+        current = current->next;
+    }
+}
+
+void* reverse (char *v){
       char *str = (char *) v, *s = str, *f = str + strlen(str) - 1;
-      while (s < f)
-      {
+      while (s < f){
             *s ^= *f;
             *f ^= *s;
             *s ^= *f;
@@ -328,26 +347,54 @@ void update_done_status(struct thr_node *node){
     }
 }
 
+struct thread_args {
+    char *path;
+    int priority, id;
+};
 
 void* disk_analyzer(void *args){   
+    log_daemon("Reached disk_analyzer function\n");
     struct thread_args *th_args = (struct thread_args*)args;
     char *path = th_args->path;
+    int id = (int)th_args->id, pri = (int)th_args->priority;
 
+    log_daemon("Before malloc\n");
+    // TODO add mutex for this
+    pthread_t *pth = malloc(sizeof(pthread_t));
+    *pth = pthread_self();
+    log_daemon("Before list_insert\n");
+    list_insert(list_head, id, pri, pth);
+
+    log_daemon("Before set priority to thread\n");
     // set thread priority
     int policy;
     struct sched_param param;
     pthread_getschedparam(pthread_self(), &policy, &param);
     param.sched_priority = sched_get_priority_max(policy) - (th_args->priority-1);
     pthread_setschedparam(pthread_self(), policy, &param);
+    log_daemon("After set priority to thread\n");
 
     size_t max_path = pathconf(".", _PC_PATH_MAX);
     char *buf = (char *)malloc(max_path);
 
-    struct thr_node *n = list_find_by_key(list_head, pthread_self());
-    char *output_path;
-    sprintf(output_path, "%s%d%s", output_file_path_prefix, n->id, ".txt");
-    int fd = open(output_path, O_CREAT | O_TRUNC | O_WRONLY | O_APPEND, S_IRWXU | S_IRWXG | S_IRWXO);
-
+    struct thr_node *n = list_find_by_thr(list_head, pthread_self());
+    log_daemon("After list_find_by_thr\n");
+    char *output_path = (char *)malloc(max_path);
+    log_daemon("Before output_path malloc\n");
+    char *s = malloc(1000);
+    list_print(list_head, s);
+    log_daemon(s);
+    
+    s = strerror(sprintf(output_path, "%s_%d.txt", output_file_path_prefix, n->id));   
+    log_daemon(s);
+    log_daemon("After output_path malloc\n");
+    int fd = open(output_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
+    if(fd < 0){
+        log_daemon("Could not open output path\n");
+        perror("Could not open output path");
+        exit(-1);
+    }
+    log_daemon("After output_path open\n");
     struct my_map m;
     map_init(&m, 10);
     // postorder
@@ -360,7 +407,7 @@ void* disk_analyzer(void *args){
         perror(NULL);
         exit(-1);
     }
-
+    log_daemon("Before postorder traversal\n");
     if (file_system != NULL){
         while ((node = fts_read(file_system)) != NULL){
             switch (node->fts_info){
@@ -394,7 +441,8 @@ void* disk_analyzer(void *args){
         }
         fts_close(file_system);
     }
-
+    log_daemon("After postorder traversal\n");
+    log_daemon("Before preorder traversal\n");
     // TODO: change 10000 to a better number and move it to constants file
     char *line = (char *)malloc(10000);
     // write the first line
@@ -463,10 +511,11 @@ void* disk_analyzer(void *args){
         }
         fts_close(file_system);
     }
-
+    log_daemon("After preorder traversal\n");
     map_clear(&m);
     close(fd);
     n->done_status = "done";
+    log_daemon("Finish disk_analyzer function\n");
 }
 
 #endif

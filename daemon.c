@@ -4,29 +4,17 @@
 #include <signal.h>
 #include <unistd.h>               // for write/close/sleep functions
 #include "process_instructions.h" // header with functions for processing the instructions
-#include "utils.h"
 
 
-
-
-
-void init()
-{
-    tasks = malloc(sizeof(struct my_map));
-    map_init(tasks, 10);
-    list_init();
-}
-
-void write_output_to_da(char *output)
-{
+void write_output_to_da(char *output){
     // TODO: use write_to_file function instead when implemented
     int fd = open(output_file_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
     write(fd, output, 4000);
     close(fd);
 }
 
-void process_input_from_da(int signo)
-{
+void process_input_from_da(int signo){
+    log_daemon("Reached function process_input_from_da\n");
     // read da pid from file
     // TODO: use read_from_file function instead when implemented
     int fd = open(da_pid_file_path, O_RDONLY);
@@ -47,9 +35,15 @@ void process_input_from_da(int signo)
     kill(pid, SIGUSR2);
 }
 
+void init(){   
+    tasks = malloc(sizeof(struct my_map));
+    map_init(tasks, 10);
+    list_init();
+    signal(SIGUSR1, process_input_from_da);
+}
 
 int main()
-{
+{   
     init();
 
     // write daemon pid to file
@@ -59,7 +53,7 @@ int main()
     if (fd < 0)
     {
         perror("Couldn't open daemon input file\n");
-        return;
+        return errno;
     }
     char *pidstring = malloc(10);
     int pid = getpid();
@@ -67,15 +61,21 @@ int main()
     write(fd, pidstring, 10);
     close(fd);
 
-    signal(SIGUSR1, process_input_from_da);
-
-    while (1)
-    {
+    struct thr_node *current = (struct thr_node*)malloc(sizeof(struct thr_node));
+    void *res;
+    while (1){
         // wait for all threads to finish
-        int i = 1;
+        current = *list_head;   
+        while(current != NULL){
+            if (strcmp(current->done_status, "done") == 0){ // wait the threads that are done
+                if(pthread_join(*current->thr, &res)){
+                    perror(NULL);
+                    exit(-1);
+                }
+            }
+            current = current->next;
+        }
     }
-
-    
 
     return 0;
 }

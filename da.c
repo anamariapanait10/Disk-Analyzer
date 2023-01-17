@@ -4,11 +4,10 @@
 #include <fcntl.h> // for open flags
 #include <stdbool.h>
 #include <signal.h>
+#include <errno.h>
 #include <unistd.h> // for write/close/sleep functions
 #include <sys/stat.h> // for stat structure (we use it to find out the number of bytes in a file)
-#include "constants.h" // header for command-constants and paths
-#include "utils.h" // header for map related functions and itoa
-#include "process_instructions.h"
+#include "utils.h"
 
 int daemon_pid; // daemon_pid is the pid read from the corresponding file
 
@@ -25,7 +24,7 @@ void write_instruction_to_daemon(char* instruction){
         kill(daemon_pid, SIGUSR1); 
         // we wait a second for the daemon to process the instruction and give the
         // signal back
-        sleep(2);
+        sleep(0.5);
     } else {
         fprintf(stderr, "Couldn't send instruction to daemon because it is not running\n");
         exit(-1);
@@ -34,7 +33,7 @@ void write_instruction_to_daemon(char* instruction){
 
 pid_t read_daemon_pid_from_file() {
     int fd = open(daemon_pid_file_path, O_RDONLY);
-     if(fd < 0){ // daemon never started yet
+    if(fd < 0){
         perror("Daemon hasn't started");
         return errno;
     }
@@ -43,15 +42,6 @@ pid_t read_daemon_pid_from_file() {
     close(fd);
 
     return atoi(buf);
-}
-
-void start_daemon() {
-    system("./disk-analyzer-daemon");
-}
-
-bool is_daemon_running() {
-    daemon_pid = read_daemon_pid_from_file();
-    return daemon_pid > 0;
 }
 
 void get_daemon_pid() {
@@ -64,7 +54,7 @@ void process_output_from_daemon(int signo) {
     printf("%s\n", res);
 }
 
-void write_pid_to_file(){
+void write_da_pid_to_file(){
     create_dir_if_not_exists(da_pid_file_path);
     // get pid and convert to char*
     char* pidstring = malloc(10);
@@ -72,6 +62,9 @@ void write_pid_to_file(){
     itoa(pid, pidstring);
     // TODO: use write_to_file function instead when implemented
     int fd = open(da_pid_file_path, O_CREAT|O_TRUNC|O_WRONLY, S_IRWXU|S_IRWXG|S_IRWXO);
+    if (fd < 0){
+        perror("Could not create da pid file\n");
+    }
     write(fd, pidstring, 10); // write pid to file
     close(fd);
 }
@@ -83,11 +76,9 @@ int main(int argc, char** argv)
     signal(SIGUSR2, process_output_from_daemon);
     // da writes its pid in a file so that the daemon knows 
     // to whom to give the signal back
-    write_pid_to_file();
+    write_da_pid_to_file();
 
     get_daemon_pid();
-
-    printf("%d", daemon_pid);
 
     char* instruction = malloc(INSTR_LENGTH);
     if (argc == 1) {
