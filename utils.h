@@ -12,7 +12,7 @@
 int task_id;
 struct my_map *tasks;
 struct thr_node **list_head;
-pthread_mutex_t mtx_lock_list, mtx_lock_map;
+pthread_mutex_t mtx_lock, mtx_lock_map;
 
 /*
 tasks
@@ -92,12 +92,10 @@ struct my_map {
 };
 
 void map_init(struct my_map *m, int n) {
-    pthread_mutex_lock(&mtx_lock_map);
     m->length = n;
     m->lista = (struct fd_node **) malloc(n * sizeof(struct fd_node *));
     for (int i = 0; i < n; i++)
         m->lista[i] = NULL;
-    pthread_mutex_unlock(&mtx_lock_map);
 }
 
 struct fd_node *map_find(struct my_map *m, int key) {
@@ -124,7 +122,6 @@ int map_find_task(struct my_map *m, char *path){
 }
 
 void map_insert(struct my_map *m, int key, void *val) {
-    pthread_mutex_lock(&mtx_lock_map);
     int mod = key % m->length;
     if (m->lista[mod] == NULL) {
         m->lista[mod] = (struct fd_node *) malloc(sizeof(struct fd_node *));
@@ -148,7 +145,6 @@ void map_insert(struct my_map *m, int key, void *val) {
         nod->next->id = key;
         nod->next->val = val;
     }
-    pthread_mutex_unlock(&mtx_lock_map);
 }
 // for debugging
 void map_print_int(struct my_map *m){
@@ -178,7 +174,6 @@ void map_print_char(struct my_map *m, char *res){
 }
 
 void map_delete(struct my_map *m, int id){
-    pthread_mutex_lock(&mtx_lock_map);
     struct fd_node *nod = (struct fd_node*)malloc(sizeof(struct fd_node));
     nod = m->lista[id%m->length];
     struct fd_node *prev = (struct fd_node*)malloc(sizeof(struct fd_node));
@@ -196,7 +191,6 @@ void map_delete(struct my_map *m, int id){
             free(nod);
         }
     }
-    pthread_mutex_unlock(&mtx_lock_map);
 }
 
 void map_clear(struct my_map *m){
@@ -220,14 +214,14 @@ void list_init(){
 }
 
 void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *thr){
-    pthread_mutex_lock(&mtx_lock_list);
+
     struct thr_node *new_node = (struct thr_node*) malloc(sizeof(struct thr_node));
    
     new_node->id = id;
     new_node->priority = priority;
     new_node->thr = thr;
-    new_node->done_status = (char*)malloc(15);
-    new_node->done_status = "preparing";
+    new_node->done_status = (char*)malloc(30);
+    strcpy(new_node->done_status, "preparing");
     new_node->files = 0;
     new_node->dirs = 0;
     // find out total number of subdirectories
@@ -237,7 +231,6 @@ void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *th
 
     new_node->next = *head_ref;
     *head_ref = new_node;
-     pthread_mutex_unlock(&mtx_lock_list);
 
 }
 
@@ -394,16 +387,22 @@ void read_from_file(const char *path, char *error_msg, char *res){
 
 void update_done_status(struct thr_node *node){
     float percent;
+
     if(node->total_dirs == 0){
         percent = 100;
     } else {
-        percent = node->dirs * 100 * 1./ node->total_dirs;
+        percent = (1.0*node->dirs * 100 )/ node->total_dirs;
     }
-    if(percent == 100){
-        node->done_status = "done";
-    } else {
-        sprintf(node->done_status, "%.1f%% in progress", percent);
-    }
+
+
+    if(abs(100-percent) <= 0.00000000001){
+         strcpy(node->done_status, "done");
+     } else {
+        char *aux=malloc(30);
+        sprintf(aux,"%.1f%% in progress\n", percent);
+        strcpy(node->done_status, aux);
+         free(aux);
+  }
 }
 
 struct thread_args {
@@ -419,8 +418,10 @@ void* disk_analyzer(void *args){
 
     pthread_t *pth = malloc(sizeof(pthread_t));
     *pth = pthread_self();
+ //   pthread_mutex_lock(&mtx_lock);
     list_insert(list_head, id, pri, pth);
-
+    map_insert(tasks, id, path);
+ //   pthread_mutex_lock(&mtx_lock);
     // set thread priority
     int policy;
     struct sched_param param;
@@ -454,6 +455,7 @@ void* disk_analyzer(void *args){
         perror(NULL);
        // exit(-1);
     }
+    n->dirs=0;
     if (file_system != NULL){
         while ((node = fts_read(file_system)) != NULL){
             switch (node->fts_info){
@@ -478,16 +480,17 @@ void* disk_analyzer(void *args){
                     if (nod2 != NULL){
                         *((float *)nod2->val) += *((float *)map_find(&m, node->fts_statp->st_ino)->val);
                     }
-                    n->dirs++;
-                     char nr[10];
-                     itoa(n->dirs,nr);
+                        n->dirs++;
+                        update_done_status(n);
+                     char nr[20];
+                     sprintf(nr,"n->dirst:%d",n->dirs);
                      log_daemon(nr);
                      
                     break;
                 default:
                     break;
             }
-            update_done_status(n);
+        
         }
         
         fts_close(file_system);

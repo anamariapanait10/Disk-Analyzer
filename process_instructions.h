@@ -107,8 +107,10 @@ void da_remove(int id, char *res){
                 log_daemon(res);
             }
         }
+       // pthread_mutex_lock(&mtx_lock);
         list_delete(list_head, id);
         map_delete(tasks, id);
+       // pthread_mutex_unlock(&mtx_lock);
         sprintf(res, "Removed analysis task with ID %d, status %s for %s", id, n->done_status, path);
     }
 }

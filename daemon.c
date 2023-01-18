@@ -39,11 +39,8 @@ void process_input_from_da(int signo){
 }
 
 void init(){   
-    if (pthread_mutex_init(&mtx_lock_map, NULL) != 0){
+    if (pthread_mutex_init(&mtx_lock, NULL) != 0){
         log_daemon("Mutex for map failed\n");
-    }
-    if (pthread_mutex_init(&mtx_lock_list, NULL) != 0){
-        log_daemon("Mutex for list failed\n");
     }
     tasks = malloc(sizeof(struct my_map));
     map_init(tasks, 10);
