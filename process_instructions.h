@@ -139,13 +139,18 @@ void da_print(int id, char *res){
     if(n == NULL){
         sprintf(res, "No existing analysis for task ID %d", id);
     } else if(strcmp(n->done_status, "done") == 0){
-        char *output_path, *msg;
-        sprintf(output_path, "%s%d.txt", output_file_path_prefix, id);
+        log_daemon("In else if\n");
+        char *output_path = malloc(PATH_MAX), *msg = malloc(PATH_MAX+30);
+        sprintf(output_path, "%s_%d.txt", output_file_path_prefix, id);
         sprintf(msg, "Couldn't open %s file\n", output_path);
+        log_daemon("Inainte de read\n");
         res = read_from_file(output_path, msg);
+        log_daemon("Dupa read\n");
     } else {
+        log_daemon("In else\n");
         sprintf(res, "Print analysis report available only for those tasks that are 'done'");
     }
+    
 }
 
 void get_output_of_instruction(char *instruction, char *res){

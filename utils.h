@@ -30,7 +30,7 @@ lista[
 */
 
 
-void log_daemon(char *msg){
+void log_daemon(const char *msg){
     //pthread_mutex_lock(pthread_mutex_t *mutex)
     int fd = open(log_file_path, O_CREAT | O_APPEND | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
     if (fd < 0){
@@ -244,7 +244,7 @@ void list_delete(struct thr_node **head_ref, int key){
 
 struct thr_node* list_find_by_key(struct thr_node** head_ref, int key){
     struct thr_node *current = (struct thr_node*)malloc(sizeof(struct thr_node));
-    current = *list_head;
+    current = *head_ref;
     while(current != NULL){
         if(current->id == key){
             return current;
@@ -256,7 +256,7 @@ struct thr_node* list_find_by_key(struct thr_node** head_ref, int key){
 
 struct thr_node* list_find_by_thr(struct thr_node** head_ref, pthread_t thr){
     struct thr_node *current = (struct thr_node*)malloc(sizeof(struct thr_node));
-    current = *list_head;
+    current = *head_ref;
     while(current != NULL){
         if(pthread_equal(*(current->thr), thr)){
             return current;
@@ -337,25 +337,40 @@ char *convert_size_to_standard_unit(float bytes){
     return size;
 }
 
+int get_file_size(const char *file_name) { 
+    log_daemon("Inainte de fopen\n");
+    FILE* fp = fopen(file_name, "r"); 
+    log_daemon("Dupa fopen\n");
+    if (fp == NULL) { 
+        printf("File Not Found!\n"); 
+        log_daemon("Dupa get file size\n");
+        return -1; 
+    } 
+    fseek(fp, 0, SEEK_END); 
+    int res = ftell(fp); 
+    fclose(fp); 
+  
+    return res; 
+} 
 
 char *read_from_file(const char *path, char *error_msg){
-    int fd = open(path, O_RDONLY);
+    log_daemon("In read_from_file\n");
+    log_daemon(path);
+    int size = 100000; //get_file_size(path);
+    log_daemon("Dupa get file size\n");
+    int fd = open(path, O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
     if(fd < 0){
-        log_daemon("Eroare deschidere fisier");
+        log_daemon("Eroare deschidere fisier\n");
         //exit(-1);
     }
-
-    struct stat sb;
-    if(stat(path, &sb)) {
-        perror(path);
-        //exit(-1);
-    }
-
-    char *buf = (char*) malloc(sb.st_size);
-    read(fd, buf, sb.st_size);
+    log_daemon("Inainte de malloc\n");
+    void *b = malloc(size);
+    log_daemon("Dupa malloc\n");
+    read(fd, b, size);
+    log_daemon("Dupa read\n");
     close(fd);
 
-    return buf;
+    return b;
 }
 
 void update_done_status(struct thr_node *node){

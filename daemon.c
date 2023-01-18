@@ -9,7 +9,7 @@
 void write_output_to_da(char *output){
     // TODO: use write_to_file function instead when implemented
     int fd = open(output_file_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
-    write(fd, output, 1000000);
+    write(fd, output, strlen(output));
     close(fd);
 }
 
