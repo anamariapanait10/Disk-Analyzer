@@ -359,6 +359,7 @@ char *read_from_file(const char *path, char *error_msg){
 }
 
 void update_done_status(struct thr_node *node){
+    if(node->total_dirs == 0 ){}
     float percent = node->dirs * 100 * 1./ node->total_dirs;
     if(percent == 100){
         node->done_status = "done";
@@ -437,6 +438,7 @@ void* disk_analyzer(void *args){
         while ((node = fts_read(file_system)) != NULL){
             //sprintf(s, "%d", node->fts_info);
             //log_daemon(s);
+            
             switch (node->fts_info){
                 case FTS_D:;
                     struct fd_node *nod = map_find(&m, node->fts_statp->st_ino);
@@ -460,15 +462,17 @@ void* disk_analyzer(void *args){
                         *((float *)nod2->val) += *((float *)map_find(&m, node->fts_statp->st_ino)->val);
                     }
                     n->dirs++;
-                    // char nr[10];
-                    // itoa(n->dirs,nr);
-                    // log_daemon(nr);
+                     char nr[10];
+                     itoa(n->dirs,nr);
+                     log_daemon(nr);
+                     
                     break;
                 default:
                     break;
-                update_done_status(n);
             }
+            
         }
+        
         fts_close(file_system);
     }
     log_daemon("After postorder traversal\n");
@@ -543,6 +547,30 @@ void* disk_analyzer(void *args){
     close(fd);
     n->done_status = "done";
     log_daemon("Finish disk_analyzer function\n");
+}
+
+void map_delete(struct my_map *m, int id){
+    log_daemon("In map_delete");
+    //pthread_mutex_lock(&mtx_lock);
+    struct fd_node *nod = (struct fd_node*)malloc(sizeof(struct fd_node));
+    nod = m->lista[id%m->length];
+    struct fd_node *prev = (struct fd_node*)malloc(sizeof(struct fd_node));
+    if(nod != NULL && nod->id == id){
+        m->lista[id%m->length] = nod->next;
+        free(nod);
+    } else {
+        while(nod != NULL && nod->id != id){
+            prev = nod;
+            nod = nod->next;
+        }
+
+        if(nod != NULL){
+            prev->next = nod->next;
+            free(nod);
+        }
+    }
+    //pthread_mutex_unlock(&mtx_lock);
+    log_daemon("After map_delete");
 }
 
 #endif

@@ -81,22 +81,21 @@ void da_remove(int id, char *res){
     if(n == NULL){
         sprintf(res, "No existing analysis for task ID %d, there is nothing to remove", id);
     } else {
+        struct fd_node *node = map_find(tasks, n->id);
+        char *path = (char*)node->val;
         int ret = pthread_cancel(*n->thr);
         if(ret == -1){
-            sprintf(res, "Could not stop thread with id %d", id);
-            perror(res);
+            log_daemon(res);
+        } else {
+            void *thr_ret;
+            pthread_join(*n->thr, &thr_ret);
+            if (thr_ret != PTHREAD_CANCELED){
+                log_daemon(res);
+            }
         }
         list_delete(list_head, id);
-        void *thr_ret;
-        pthread_join(*n->thr, &thr_ret);
-        if (thr_ret == PTHREAD_CANCELED){
-            struct fd_node *node = map_find(tasks, n->id);
-            char *path = (char*)node->val;
-            sprintf(res, "Removed analysis task with ID %d, status %s for %s", id, n->done_status, path);
-        } else {
-            sprintf(res, "Could not stop thread with id %d", id);
-            perror(res);
-        }
+        map_delete(tasks, id);
+        sprintf(res, "Removed analysis task with ID %d, status %s for %s", id, n->done_status, path);
     }
 }
 
