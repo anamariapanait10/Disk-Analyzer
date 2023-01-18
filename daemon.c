@@ -28,7 +28,9 @@ void process_input_from_da(int signo){
     fd = open(instruction_file_path, O_RDONLY);
     read(fd, instruction, 500);
     get_output_of_instruction(instruction, res);
-    log_daemon(res);
+    char *s = malloc(1000000);
+    sprintf(s, "Dupa get output: %s", res);
+    log_daemon(s);
     write_output_to_da(res);
 
     // send finish signal to da
@@ -37,21 +39,16 @@ void process_input_from_da(int signo){
 }
 
 void init(){   
-    if (pthread_mutex_init(&mtx_lock, NULL) != 0)
-    {
-        log_daemon("Mutex init failed\n");
+    if (pthread_mutex_init(&mtx_lock_map, NULL) != 0){
+        log_daemon("Mutex for map failed\n");
+    }
+    if (pthread_mutex_init(&mtx_lock_list, NULL) != 0){
+        log_daemon("Mutex for list failed\n");
     }
     tasks = malloc(sizeof(struct my_map));
     map_init(tasks, 10);
     list_init();
     signal(SIGUSR1, process_input_from_da);
-    // delete old content of log file
-    // int fd = open(log_file_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
-    // if (fd < 0){
-    //     perror("Couldn't open log file\n");
-    // }
-    // write(fd, "\0", 1);
-    // close(fd);
 }
 
 int main()

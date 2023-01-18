@@ -12,9 +12,7 @@
 int task_id;
 struct my_map *tasks;
 struct thr_node **list_head;
-
-
-pthread_mutex_t mtx_lock;
+pthread_mutex_t mtx_lock_list, mtx_lock_map;
 
 /*
 tasks
@@ -31,7 +29,6 @@ lista[
 
 
 void log_daemon(const char *msg){
-    //pthread_mutex_lock(pthread_mutex_t *mutex)
     int fd = open(log_file_path, O_CREAT | O_APPEND | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
     if (fd < 0){
         perror("Couldn't open log file\n");
@@ -63,12 +60,10 @@ int count_dirs(char *path){
     FTSENT *node = NULL;
 
     char *paths[] = {path, NULL};
-
     if (!(file_system = fts_open(paths, FTS_COMFOLLOW | FTS_NOCHDIR, &compare))){
         perror(NULL);
         return errno;
     }
-    log_daemon("Inainte de parcurgere\n");
     if (file_system != NULL){
         while ((node = fts_read(file_system)) != NULL){
             switch (node->fts_info){
@@ -81,7 +76,6 @@ int count_dirs(char *path){
         }
         fts_close(file_system);
     }
-    log_daemon("Dupa parcurgere\n");
     return count;
 }
 
@@ -98,10 +92,12 @@ struct my_map {
 };
 
 void map_init(struct my_map *m, int n) {
+    pthread_mutex_lock(&mtx_lock_map);
     m->length = n;
     m->lista = (struct fd_node **) malloc(n * sizeof(struct fd_node *));
     for (int i = 0; i < n; i++)
         m->lista[i] = NULL;
+    pthread_mutex_unlock(&mtx_lock_map);
 }
 
 struct fd_node *map_find(struct my_map *m, int key) {
@@ -128,6 +124,7 @@ int map_find_task(struct my_map *m, char *path){
 }
 
 void map_insert(struct my_map *m, int key, void *val) {
+    pthread_mutex_lock(&mtx_lock_map);
     int mod = key % m->length;
     if (m->lista[mod] == NULL) {
         m->lista[mod] = (struct fd_node *) malloc(sizeof(struct fd_node *));
@@ -151,6 +148,7 @@ void map_insert(struct my_map *m, int key, void *val) {
         nod->next->id = key;
         nod->next->val = val;
     }
+    pthread_mutex_unlock(&mtx_lock_map);
 }
 // for debugging
 void map_print_int(struct my_map *m){
@@ -179,6 +177,28 @@ void map_print_char(struct my_map *m, char *res){
     }
 }
 
+void map_delete(struct my_map *m, int id){
+    pthread_mutex_lock(&mtx_lock_map);
+    struct fd_node *nod = (struct fd_node*)malloc(sizeof(struct fd_node));
+    nod = m->lista[id%m->length];
+    struct fd_node *prev = (struct fd_node*)malloc(sizeof(struct fd_node));
+    if(nod != NULL && nod->id == id){
+        m->lista[id%m->length] = nod->next;
+        free(nod);
+    } else {
+        while(nod != NULL && nod->id != id){
+            prev = nod;
+            nod = nod->next;
+        }
+
+        if(nod != NULL){
+            prev->next = nod->next;
+            free(nod);
+        }
+    }
+    pthread_mutex_unlock(&mtx_lock_map);
+}
+
 void map_clear(struct my_map *m){
     for(int i = 0; i < m->length; i++)
         free(m->lista[i]);
@@ -200,7 +220,7 @@ void list_init(){
 }
 
 void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *thr){
-     pthread_mutex_lock(&mtx_lock);
+    pthread_mutex_lock(&mtx_lock_list);
     struct thr_node *new_node = (struct thr_node*) malloc(sizeof(struct thr_node));
    
     new_node->id = id;
@@ -217,7 +237,7 @@ void list_insert(struct thr_node **head_ref, int id, int priority, pthread_t *th
 
     new_node->next = *head_ref;
     *head_ref = new_node;
-     pthread_mutex_unlock(&mtx_lock);
+     pthread_mutex_unlock(&mtx_lock_list);
 
 }
 
@@ -243,6 +263,7 @@ void list_delete(struct thr_node **head_ref, int key){
 }
 
 struct thr_node* list_find_by_key(struct thr_node** head_ref, int key){
+    log_daemon("In list_find_by_key\n");
     struct thr_node *current = (struct thr_node*)malloc(sizeof(struct thr_node));
     current = *head_ref;
     while(current != NULL){
@@ -353,10 +374,10 @@ int get_file_size(const char *file_name) {
     return res; 
 } 
 
-char *read_from_file(const char *path, char *error_msg){
+void read_from_file(const char *path, char *error_msg, char *res){
     log_daemon("In read_from_file\n");
     log_daemon(path);
-    int size = 100000; //get_file_size(path);
+    int size = 10000000; //get_file_size(path);
     log_daemon("Dupa get file size\n");
     int fd = open(path, O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
     if(fd < 0){
@@ -364,18 +385,20 @@ char *read_from_file(const char *path, char *error_msg){
         //exit(-1);
     }
     log_daemon("Inainte de malloc\n");
-    void *b = malloc(size);
+    
     log_daemon("Dupa malloc\n");
-    read(fd, b, size);
+    read(fd, res, size);
     log_daemon("Dupa read\n");
     close(fd);
-
-    return b;
 }
 
 void update_done_status(struct thr_node *node){
-    if(node->total_dirs == 0 ){}
-    float percent = node->dirs * 100 * 1./ node->total_dirs;
+    float percent;
+    if(node->total_dirs == 0){
+        percent = 100;
+    } else {
+        percent = node->dirs * 100 * 1./ node->total_dirs;
+    }
     if(percent == 100){
         node->done_status = "done";
     } else {
@@ -394,46 +417,31 @@ void* disk_analyzer(void *args){
     char *path = th_args->path;
     int id = (int)th_args->id, pri = (int)th_args->priority;
 
-    log_daemon("Before malloc\n");
-    // TODO add mutex for this
     pthread_t *pth = malloc(sizeof(pthread_t));
     *pth = pthread_self();
-    log_daemon("Before list_insert\n");
-     char nr[10];
-    sprintf(nr, "%d\n",pri);
-    log_daemon(nr);
     list_insert(list_head, id, pri, pth);
 
-    log_daemon("Before set priority to thread\n");
     // set thread priority
     int policy;
     struct sched_param param;
     pthread_getschedparam(pthread_self(), &policy, &param);
     param.sched_priority = sched_get_priority_max(policy) - (th_args->priority-1);
     pthread_setschedparam(pthread_self(), policy, &param);
-    log_daemon("After set priority to thread\n");
 
     size_t max_path = pathconf(".", _PC_PATH_MAX);
     char *buf = (char *)malloc(max_path);
 
     struct thr_node *n = list_find_by_thr(list_head, pthread_self());
-    log_daemon("After list_find_by_thr\n");
     char *output_path = (char *)malloc(max_path);
-    log_daemon("Before output_path malloc\n");
-    char *s = malloc(1000);
-    list_print(list_head, s);
-    log_daemon(s);
 
     sprintf(output_path, "%s_%d.txt", output_file_path_prefix, n->id);   
     
-    log_daemon("After output_path malloc\n");
     int fd = open(output_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
     if(fd < 0){
         log_daemon("Could not open output path\n");
-        perror("Could not open output path");
-       // exit(-1);
+        exit(-1);
     }
-    log_daemon("After output_path open\n");
+
     struct my_map m;
     map_init(&m, 10);
     // postorder
@@ -446,14 +454,8 @@ void* disk_analyzer(void *args){
         perror(NULL);
        // exit(-1);
     }
-    log_daemon("Before postorder traversal\n");
-    sprintf(s, "%d", (file_system==NULL));
-    log_daemon(s);
     if (file_system != NULL){
         while ((node = fts_read(file_system)) != NULL){
-            //sprintf(s, "%d", node->fts_info);
-            //log_daemon(s);
-            
             switch (node->fts_info){
                 case FTS_D:;
                     struct fd_node *nod = map_find(&m, node->fts_statp->st_ino);
@@ -485,17 +487,16 @@ void* disk_analyzer(void *args){
                 default:
                     break;
             }
-            
+            update_done_status(n);
         }
         
         fts_close(file_system);
     }
-    log_daemon("After postorder traversal\n");
-    log_daemon("Before preorder traversal\n");
+    log_daemon("After postorder traversal and before preorder traversal\n");
     // TODO: change 10000 to a better number and move it to constants file
     char *line = (char *)malloc(10000);
     // write the first line
-    sprintf(line, "    Path\t\tUsage\tSize\t\tAmount\n");
+    sprintf(line, "    Path\tUsage\tSize\t\tAmount\n");
     write(fd, line, strlen(line));
 
     int total_size = 0;                                                                 // needed to calculate the percentage
@@ -554,38 +555,11 @@ void* disk_analyzer(void *args){
         }
         fts_close(file_system);
     }
-    char nrDir[1000];
-    itoa(list_find_by_thr(list_head,pthread_self())->dirs, nrDir);
-    log_daemon(nrDir);
-    log_daemon("After preorder traversal\n");
     map_clear(&m);
     close(fd);
     n->done_status = "done";
     log_daemon("Finish disk_analyzer function\n");
 }
 
-void map_delete(struct my_map *m, int id){
-    log_daemon("In map_delete");
-    //pthread_mutex_lock(&mtx_lock);
-    struct fd_node *nod = (struct fd_node*)malloc(sizeof(struct fd_node));
-    nod = m->lista[id%m->length];
-    struct fd_node *prev = (struct fd_node*)malloc(sizeof(struct fd_node));
-    if(nod != NULL && nod->id == id){
-        m->lista[id%m->length] = nod->next;
-        free(nod);
-    } else {
-        while(nod != NULL && nod->id != id){
-            prev = nod;
-            nod = nod->next;
-        }
-
-        if(nod != NULL){
-            prev->next = nod->next;
-            free(nod);
-        }
-    }
-    //pthread_mutex_unlock(&mtx_lock);
-    log_daemon("After map_delete");
-}
 
 #endif

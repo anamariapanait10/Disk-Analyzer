@@ -49,7 +49,8 @@ void get_daemon_pid() {
 }
 
 void process_output_from_daemon(int signo) {
-    char *res = read_from_file(output_file_path, "Couldn't open daemon output file\n");
+    char *res = malloc(1000000);
+    read_from_file(output_file_path, "Couldn't open daemon output file\n", res);
     // print output to console
     printf("%s\n", res);
 }
